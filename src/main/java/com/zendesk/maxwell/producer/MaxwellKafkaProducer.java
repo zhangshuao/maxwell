@@ -16,7 +16,6 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.errors.RecordTooLargeException;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -141,7 +140,7 @@ class MaxwellKafkaProducerWorker extends AbstractAsyncProducer implements Runnab
 		}
 
 		this.interpolateTopic = this.topic.contains("%{");
-		this.kafka = new KafkaProducer<>(kafkaProperties, new StringSerializer(), new StringSerializer());
+		this.kafka = KafkaProducerFactory.get(kafkaProperties);
 
 		String hash = context.getConfig().kafkaPartitionHash;
 		String partitionKey = context.getConfig().producerPartitionKey;

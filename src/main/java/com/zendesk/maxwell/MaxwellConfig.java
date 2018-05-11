@@ -41,6 +41,7 @@ public class MaxwellConfig extends AbstractConfig {
 	public ProducerFactory producerFactory; // producerFactory has precedence over producerType
 	public final Properties customProducerProperties;
 	public String producerType;
+	public Map<String, Properties> routingConfigs;
 
 	public final Properties kafkaProperties;
 	public String kafkaTopic;
@@ -133,6 +134,7 @@ public class MaxwellConfig extends AbstractConfig {
 		this.metricRegistry = new MetricRegistry();
 		this.healthCheckRegistry = new HealthCheckRegistry();
 		this.outputConfig = new MaxwellOutputConfig();
+		this.routingConfigs = new HashMap<>();
 		setup(null, null); // setup defaults
 	}
 
@@ -400,12 +402,17 @@ public class MaxwellConfig extends AbstractConfig {
 			for (Enumeration<Object> e = properties.keys(); e.hasMoreElements(); ) {
 				String k = (String) e.nextElement();
 				if (k.startsWith("custom_producer.")) {
-					this.customProducerProperties.setProperty(k.replace("custom_producer.", ""), properties.getProperty(k));
+					this.customProducerProperties.setProperty(k.replaceFirst("custom_producer.", ""), properties.getProperty(k));
 				} else if (k.startsWith("kafka.")) {
 					if (k.equals("kafka.bootstrap.servers") && kafkaBootstrapServers != null)
 						continue; // don't override command line bootstrap servers with config files'
 
-					this.kafkaProperties.setProperty(k.replace("kafka.", ""), properties.getProperty(k));
+					this.kafkaProperties.setProperty(k.replaceFirst("kafka.", ""), properties.getProperty(k));
+				} else if (k.startsWith("routing_producer_")) {
+					// routing_producer_name_foo=bar
+					String configWithName = k.replaceFirst("routing_producer_", "");
+					String name = configWithName.split("_")[0];
+					this.routingConfigs.computeIfAbsent(name, i -> new Properties()).setProperty(configWithName.replaceFirst(name + "_", ""), properties.getProperty(k));
 				}
 			}
 		}

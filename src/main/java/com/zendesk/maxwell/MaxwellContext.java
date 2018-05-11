@@ -23,9 +23,7 @@ import java.net.URISyntaxException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MaxwellContext {
@@ -330,47 +328,7 @@ public class MaxwellContext {
 		if ( this.producer != null )
 			return this.producer;
 
-		if ( this.config.producerFactory != null ) {
-			this.producer = this.config.producerFactory.createProducer(this);
-		} else {
-			switch ( this.config.producerType ) {
-			case "file":
-				this.producer = new FileProducer(this, this.config.outputFile);
-				break;
-			case "kafka":
-				this.producer = new MaxwellKafkaProducer(this, this.config.getKafkaProperties(), this.config.kafkaTopic);
-				break;
-			case "kinesis":
-				this.producer = new MaxwellKinesisProducer(this, this.config.kinesisStream);
-				break;
-			case "sqs":
-				this.producer = new MaxwellSQSProducer(this, this.config.sqsQueueUri);
-				break;
-			case "pubsub":
-				this.producer = new MaxwellPubsubProducer(this, this.config.pubsubProjectId, this.config.pubsubTopic, this.config.ddlPubsubTopic);
-				break;
-			case "profiler":
-				this.producer = new ProfilerProducer(this);
-				break;
-			case "stdout":
-				this.producer = new StdoutProducer(this);
-				break;
-			case "buffer":
-				this.producer = new BufferedProducer(this, this.config.bufferedProducerSize);
-				break;
-			case "rabbitmq":
-				this.producer = new RabbitmqProducer(this);
-				break;
-			case "redis":
-				this.producer = new MaxwellRedisProducer(this, this.config.redisPubChannel, this.config.redisListKey, this.config.redisType);
-				break;
-			case "none":
-				this.producer = null;
-				break;
-			default:
-				throw new RuntimeException("Unknown producer type: " + this.config.producerType);
-			}
-		}
+		this.producer = createProducer(this.config.producerType);
 
 		if (this.producer != null && this.producer.getDiagnostic() != null) {
 			diagnosticContext.diagnostics.add(producer.getDiagnostic());
@@ -384,6 +342,62 @@ public class MaxwellContext {
 			addTask(task);
 		}
 		return this.producer;
+	}
+
+	private AbstractProducer createProducer(String producerType) throws IOException {
+		switch (producerType) {
+			case "custom":
+				if (this.config.producerFactory == null) {
+					throw new RuntimeException("Custom producer factory undefined");
+				}
+				return this.config.producerFactory.createProducer(this);
+			case "file":
+				return new FileProducer(this, this.config.outputFile);
+			case "kafka":
+				return new MaxwellKafkaProducer(this, this.config.getKafkaProperties(), this.config.kafkaTopic);
+			case "kinesis":
+				return new MaxwellKinesisProducer(this, this.config.kinesisStream);
+			case "sqs":
+				return new MaxwellSQSProducer(this, this.config.sqsQueueUri);
+			case "pubsub":
+				return new MaxwellPubsubProducer(this, this.config.pubsubProjectId, this.config.pubsubTopic, this.config.ddlPubsubTopic);
+			case "profiler":
+				return new ProfilerProducer(this);
+			case "stdout":
+				return new StdoutProducer(this);
+			case "buffer":
+				return new BufferedProducer(this, this.config.bufferedProducerSize);
+			case "rabbitmq":
+				return new RabbitmqProducer(this);
+			case "redis":
+				return new MaxwellRedisProducer(this, this.config.redisPubChannel, this.config.redisListKey, this.config.redisType);
+			case "route":
+				return new RoutingProducer(this, createRouting());
+			case "none":
+				return null;
+			default:
+				throw new RuntimeException("Unknown producer type: " + this.config.producerType);
+    }
+	}
+
+	private Map<String, AbstractProducer> createRouting() throws IOException {
+		Map<String, AbstractProducer> routing = new HashMap<>();
+		for (Map.Entry<String, Properties> entry : this.config.routingConfigs.entrySet()) {
+			Properties properties = entry.getValue();
+			String producerType = properties.getProperty("producer_type");
+			if (producerType == null) {
+				throw new RuntimeException("producer_type not configured for routing producer " + entry.getKey());
+			}
+			if (producerType.equals("kafka")) {
+				this.config.kafkaTopic = properties.getProperty("topic", "maxwell");
+			}
+			String dbTable = properties.getProperty("database_table");
+			if (dbTable == null) {
+				throw new RuntimeException("database_table not configured for routing producer " + entry.getKey());
+			}
+			routing.put(dbTable, createProducer(producerType));
+		}
+		return routing;
 	}
 
 	public AbstractBootstrapper getBootstrapper() throws IOException {

@@ -48,7 +48,7 @@ public class InflightMessageList {
 		this.context = context;
 		this.producerAckTimeoutMS = context.getConfig().producerAckTimeout;
 		this.completePercentageThreshold = completePercentageThreshold;
-		this.linkedMap = new LinkedHashMap<>();
+		this.linkedMap = SingletonLinkedMap.getInstance();
 		this.capacity = capacity;
 	}
 
@@ -120,5 +120,16 @@ public class InflightMessageList {
 
 	private Iterator<InflightMessage> iterator() {
 		return this.linkedMap.values().iterator();
+	}
+}
+
+class SingletonLinkedMap {
+	private static LinkedHashMap<Position, InflightMessageList.InflightMessage> linkedMap;
+	private SingletonLinkedMap() {}
+	public static LinkedHashMap<Position, InflightMessageList.InflightMessage> getInstance() {
+		if (linkedMap == null) {
+			linkedMap = new LinkedHashMap<>();
+		}
+		return linkedMap;
 	}
 }
