@@ -6,7 +6,9 @@ package com.zendesk.maxwell.producer;
    Assumes .addInflight(position) will be call monotonically.
    */
 
+import com.codahale.metrics.Gauge;
 import com.zendesk.maxwell.MaxwellContext;
+import com.zendesk.maxwell.monitoring.Metrics;
 import com.zendesk.maxwell.replication.Position;
 
 import java.util.Iterator;
@@ -30,7 +32,7 @@ public class InflightMessageList {
 		}
 	}
 
-	private static final long INIT_CAPACITY = 1000;
+	private static final int INIT_CAPACITY = 1000;
 	private static final double COMPLETE_PERCENTAGE_THRESHOLD = 0.9;
 
 	private final LinkedHashMap<Position, InflightMessage> linkedMap;
@@ -44,12 +46,16 @@ public class InflightMessageList {
 		this(context, INIT_CAPACITY, COMPLETE_PERCENTAGE_THRESHOLD);
 	}
 
-	public InflightMessageList(MaxwellContext context, long capacity, double completePercentageThreshold) {
+	public InflightMessageList(MaxwellContext context, int capacity, double completePercentageThreshold) {
 		this.context = context;
 		this.producerAckTimeoutMS = context.getConfig().producerAckTimeout;
 		this.completePercentageThreshold = completePercentageThreshold;
-		this.linkedMap = SingletonLinkedMap.getInstance();
+		this.linkedMap = new LinkedHashMap<>(INIT_CAPACITY);
 		this.capacity = capacity;
+
+		Metrics metrics = context.getMetrics();
+		String gaugeName = metrics.metricName("inflightmessages", "count");
+		metrics.register(gaugeName, (Gauge<Long>) () -> (long) this.size());
 	}
 
 	public void addMessage(Position p) throws InterruptedException {
@@ -120,16 +126,5 @@ public class InflightMessageList {
 
 	private Iterator<InflightMessage> iterator() {
 		return this.linkedMap.values().iterator();
-	}
-}
-
-class SingletonLinkedMap {
-	private static LinkedHashMap<Position, InflightMessageList.InflightMessage> linkedMap;
-	private SingletonLinkedMap() {}
-	public static LinkedHashMap<Position, InflightMessageList.InflightMessage> getInstance() {
-		if (linkedMap == null) {
-			linkedMap = new LinkedHashMap<>();
-		}
-		return linkedMap;
 	}
 }

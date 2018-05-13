@@ -51,6 +51,8 @@ public class MaxwellContext {
 	private final HeartbeatNotifier heartbeatNotifier;
 	private final MaxwellDiagnosticContext diagnosticContext;
 
+	private final InflightMessageList inflightMessageList;
+
 	public MaxwellContext(MaxwellConfig config) throws SQLException, URISyntaxException {
 		this.config = config;
 		this.config.validate();
@@ -92,6 +94,8 @@ public class MaxwellContext {
 		this.heartbeatNotifier = new HeartbeatNotifier();
 		List<MaxwellDiagnostic> diagnostics = new ArrayList<>(Collections.singletonList(new BinlogConnectorDiagnostic(this)));
 		this.diagnosticContext = new MaxwellDiagnosticContext(config.diagnosticConfig, diagnostics);
+
+		this.inflightMessageList = new InflightMessageList(this);
 	}
 
 	public MaxwellConfig getConfig() {
@@ -451,5 +455,9 @@ public class MaxwellContext {
 
 	public MaxwellDiagnosticContext getDiagnosticContext() {
 		return this.diagnosticContext;
+	}
+
+	public InflightMessageList getInflightMessageList() {
+		return this.inflightMessageList;
 	}
 }
