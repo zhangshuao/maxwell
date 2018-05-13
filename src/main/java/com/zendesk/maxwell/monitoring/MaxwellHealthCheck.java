@@ -9,7 +9,7 @@ public class MaxwellHealthCheck extends HealthCheck {
 	private final Meter failedMessageMeter;
 
 	public MaxwellHealthCheck(AbstractProducer producer) {
-		this.failedMessageMeter = producer.getFailedMessageMeter();
+		this.failedMessageMeter = producer.getProducerMetrics().getFailedMessageMeter();
 	}
 
 	@Override

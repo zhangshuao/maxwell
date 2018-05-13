@@ -27,7 +27,7 @@ public abstract class AbstractAsyncProducer extends AbstractProducer {
 
 				if (message != null) {
 					context.setPosition(message.position);
-					metricsTimer.update(message.timeSinceSendMS(), TimeUnit.MILLISECONDS);
+					context.getProducerMetrics().getMetricsTimer().update(message.timeSinceSendMS(), TimeUnit.MILLISECONDS);
 				}
 			}
 		}

@@ -49,11 +49,11 @@ public class MaxwellRedisProducer extends AbstractProducer implements StoppableT
 					jedis.publish(this.channel, msg);
 					break;
 			}
-			this.succeededMessageCount.inc();
-			this.succeededMessageMeter.mark();
+			this.producerMetrics.getSucceededMessageCount().inc();
+			this.producerMetrics.getSucceededMessageMeter().mark();
 		} catch (Exception e) {
-			this.failedMessageCount.inc();
-			this.failedMessageMeter.mark();
+			this.producerMetrics.getFailedMessageCount().inc();
+			this.producerMetrics.getFailedMessageMeter().mark();
 			logger.error("Exception during put", e);
 
 			if (!context.getConfig().ignoreProducerError) {

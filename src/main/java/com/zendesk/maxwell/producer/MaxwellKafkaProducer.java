@@ -1,8 +1,7 @@
 package com.zendesk.maxwell.producer;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Meter;
 import com.zendesk.maxwell.MaxwellContext;
+import com.zendesk.maxwell.monitoring.MaxwellProducerMetrics;
 import com.zendesk.maxwell.producer.partitioners.MaxwellKafkaPartitioner;
 import com.zendesk.maxwell.replication.Position;
 import com.zendesk.maxwell.row.RowMap;
@@ -28,33 +27,24 @@ class KafkaCallback implements Callback {
 	private final AbstractAsyncProducer.CallbackCompleter cc;
 	private final Position position;
 	private final String json;
+	private final MaxwellProducerMetrics producerMetrics;
 	private final String key;
 	private final MaxwellContext context;
 
-	private Counter succeededMessageCount;
-	private Counter failedMessageCount;
-	private Meter succeededMessageMeter;
-	private Meter failedMessageMeter;
-
-	public KafkaCallback(AbstractAsyncProducer.CallbackCompleter cc, Position position, String key, String json,
-	                     Counter producedMessageCount, Counter failedMessageCount, Meter producedMessageMeter,
-	                     Meter failedMessageMeter, MaxwellContext context) {
+	public KafkaCallback(AbstractAsyncProducer.CallbackCompleter cc, Position position, String key, String json, MaxwellContext context) {
 		this.cc = cc;
 		this.position = position;
 		this.key = key;
 		this.json = json;
-		this.succeededMessageCount = producedMessageCount;
-		this.failedMessageCount = failedMessageCount;
-		this.succeededMessageMeter = producedMessageMeter;
-		this.failedMessageMeter = failedMessageMeter;
 		this.context = context;
+		this.producerMetrics = context.getProducerMetrics();
 	}
 
 	@Override
 	public void onCompletion(RecordMetadata md, Exception e) {
 		if ( e != null ) {
-			this.failedMessageCount.inc();
-			this.failedMessageMeter.mark();
+			this.producerMetrics.getFailedMessageCount().inc();
+			this.producerMetrics.getFailedMessageMeter().mark();
 
 			LOGGER.error(e.getClass().getSimpleName() + " @ " + position + " -- " + key);
 			LOGGER.error(e.getLocalizedMessage());
@@ -65,8 +55,8 @@ class KafkaCallback implements Callback {
 				return;
 			}
 		} else {
-			this.succeededMessageCount.inc();
-			this.succeededMessageMeter.mark();
+			this.producerMetrics.getSucceededMessageCount().inc();
+			this.producerMetrics.getSucceededMessageMeter().mark();
 
 			if (LOGGER.isDebugEnabled()) {
 				LOGGER.debug("->  key:" + key + ", partition:" + md.partition() + ", offset:" + md.offset());
@@ -202,8 +192,7 @@ class MaxwellKafkaProducerWorker extends AbstractAsyncProducer implements Runnab
 		/* if debug logging isn't enabled, release the reference to `value`, which can ease memory pressure somewhat */
 		String value = KafkaCallback.LOGGER.isDebugEnabled() ? record.value() : null;
 
-		KafkaCallback callback = new KafkaCallback(cc, r.getPosition(), record.key(), value,
-				this.succeededMessageCount, this.failedMessageCount, this.succeededMessageMeter, this.failedMessageMeter, this.context);
+		KafkaCallback callback = new KafkaCallback(cc, r.getPosition(), record.key(), value, this.context);
 
 		sendAsync(record, callback);
 	}

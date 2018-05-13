@@ -52,6 +52,7 @@ public class MaxwellContext {
 	private final MaxwellDiagnosticContext diagnosticContext;
 
 	private final InflightMessageList inflightMessageList;
+	private final MaxwellProducerMetrics producerMetrics;
 
 	public MaxwellContext(MaxwellConfig config) throws SQLException, URISyntaxException {
 		this.config = config;
@@ -96,6 +97,7 @@ public class MaxwellContext {
 		this.diagnosticContext = new MaxwellDiagnosticContext(config.diagnosticConfig, diagnostics);
 
 		this.inflightMessageList = new InflightMessageList(this);
+		this.producerMetrics = new MaxwellProducerMetrics(this);
 	}
 
 	public MaxwellConfig getConfig() {
@@ -459,5 +461,9 @@ public class MaxwellContext {
 
 	public InflightMessageList getInflightMessageList() {
 		return this.inflightMessageList;
+	}
+
+	public MaxwellProducerMetrics getProducerMetrics() {
+		return producerMetrics;
 	}
 }

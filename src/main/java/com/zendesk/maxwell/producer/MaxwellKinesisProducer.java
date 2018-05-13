@@ -1,31 +1,22 @@
 package com.zendesk.maxwell.producer;
 
-import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-
+import com.amazonaws.services.kinesis.producer.*;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Meter;
 import com.zendesk.maxwell.MaxwellContext;
+import com.zendesk.maxwell.monitoring.MaxwellProducerMetrics;
 import com.zendesk.maxwell.producer.partitioners.MaxwellKinesisPartitioner;
-import com.zendesk.maxwell.replication.BinlogPosition;
 import com.zendesk.maxwell.replication.Position;
 import com.zendesk.maxwell.row.RowMap;
-
-import com.amazonaws.services.kinesis.producer.Attempt;
-import com.amazonaws.services.kinesis.producer.KinesisProducer;
-import com.amazonaws.services.kinesis.producer.KinesisProducerConfiguration;
-import com.amazonaws.services.kinesis.producer.UserRecordFailedException;
-import com.amazonaws.services.kinesis.producer.UserRecordResult;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 class KinesisCallback implements FutureCallback<UserRecordResult> {
 	public static final Logger logger = LoggerFactory.getLogger(KinesisCallback.class);
@@ -33,33 +24,25 @@ class KinesisCallback implements FutureCallback<UserRecordResult> {
 	private final AbstractAsyncProducer.CallbackCompleter cc;
 	private final Position position;
 	private final String json;
+	private final MaxwellProducerMetrics producerMetrics;
 	private MaxwellContext context;
 	private final String key;
-	private Counter succeededMessageCount;
-	private Counter failedMessageCount;
-	private Meter succeededMessageMeter;
-	private Meter failedMessageMeter;
 
-	public KinesisCallback(AbstractAsyncProducer.CallbackCompleter cc, Position position, String key, String json,
-						   Counter producedMessageCount, Counter failedMessageCount, Meter producedMessageMeter,
-						   Meter failedMessageMeter, MaxwellContext context) {
+	public KinesisCallback(AbstractAsyncProducer.CallbackCompleter cc, Position position, String key, String json, MaxwellContext context) {
 		this.cc = cc;
 		this.position = position;
 		this.key = key;
 		this.json = json;
-		this.succeededMessageCount = producedMessageCount;
-		this.failedMessageCount = failedMessageCount;
-		this.succeededMessageMeter = producedMessageMeter;
-		this.failedMessageMeter = failedMessageMeter;
 		this.context = context;
+		this.producerMetrics = context.getProducerMetrics();
 	}
 
 	@Override
 	public void onFailure(Throwable t) {
 		logger.error(t.getClass().getSimpleName() + " @ " + position + " -- " + key);
 		logger.error(t.getLocalizedMessage());
-		this.failedMessageCount.inc();
-		this.failedMessageMeter.mark();
+		this.producerMetrics.getFailedMessageCount().inc();
+		this.producerMetrics.getFailedMessageMeter().mark();
 
 		if(t instanceof UserRecordFailedException) {
 			Attempt last = Iterables.getLast(((UserRecordFailedException) t).getResult().getAttempts());
@@ -77,8 +60,8 @@ class KinesisCallback implements FutureCallback<UserRecordResult> {
 
 	@Override
 	public void onSuccess(UserRecordResult result) {
-		this.succeededMessageCount.inc();
-		this.succeededMessageMeter.mark();
+		this.producerMetrics.getSucceededMessageCount().inc();
+		this.producerMetrics.getSucceededMessageMeter().mark();
 		if(logger.isDebugEnabled()) {
 			logger.debug("->  key:" + key + ", shard id:" + result.getShardId() + ", sequence number:" + result.getSequenceNumber());
 			logger.debug("   " + json);
@@ -91,8 +74,6 @@ class KinesisCallback implements FutureCallback<UserRecordResult> {
 }
 
 public class MaxwellKinesisProducer extends AbstractAsyncProducer {
-	private static final Logger logger = LoggerFactory.getLogger(MaxwellKinesisProducer.class);
-
 	private final MaxwellKinesisPartitioner partitioner;
 	private final KinesisProducer kinesisProducer;
 	private final String kinesisStream;
@@ -129,8 +110,7 @@ public class MaxwellKinesisProducer extends AbstractAsyncProducer {
 			value = null;
 		}
 
-		FutureCallback<UserRecordResult> callback = new KinesisCallback(cc, r.getPosition(), key, value,
-				this.succeededMessageCount, this.failedMessageCount, this.succeededMessageMeter, this.failedMessageMeter, this.context);
+		FutureCallback<UserRecordResult> callback = new KinesisCallback(cc, r.getPosition(), key, value, this.context);
 
 		Futures.addCallback(future, callback);
 	}
