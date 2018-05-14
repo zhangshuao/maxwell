@@ -389,6 +389,7 @@ public class MaxwellContext {
 	private Map<String, AbstractProducer> createRouting() throws IOException {
 		Map<String, AbstractProducer> routing = new HashMap<>();
 		for (Map.Entry<String, Properties> entry : this.config.routingConfigs.entrySet()) {
+			String producerName = entry.getKey();
 			Properties properties = entry.getValue();
 			String producerType = properties.getProperty("producer_type");
 			if (producerType == null) {
@@ -398,10 +399,10 @@ public class MaxwellContext {
 				this.config.kafkaTopic = properties.getProperty("topic", "maxwell");
 			}
 			String dbTable = properties.getProperty("database_table");
-			if (dbTable == null) {
+			if (dbTable == null && !producerName.equals("default")) {
 				throw new RuntimeException("database_table not configured for routing producer " + entry.getKey());
 			}
-			routing.put(dbTable, createProducer(producerType));
+			routing.put(dbTable != null ? dbTable : "default", createProducer(producerType));
 		}
 		return routing;
 	}

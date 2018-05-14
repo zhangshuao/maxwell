@@ -25,7 +25,7 @@ public class RoutingProducer extends AbstractProducer {
 		sb.setLength(0);
 		String tableKey = sb.append(":").append(r.getTable()).toString();
 
-		Optional<AbstractProducer> producer = Stream.of(dbTableKey, dbKey, tableKey).map(producers::get).filter(Objects::nonNull).findFirst();
+		Optional<AbstractProducer> producer = Stream.of(dbTableKey, dbKey, tableKey, "default").map(producers::get).filter(Objects::nonNull).findFirst();
 		if (producer.isPresent()) {
 			producer.get().push(r);
 		}
