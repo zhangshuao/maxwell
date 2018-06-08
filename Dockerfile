@@ -5,8 +5,11 @@ RUN apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y make
 
-COPY . /workspace
+# prime so we can have a cached image of the maven deps
+COPY pom.xml /tmp
+RUN cd /tmp && mvn dependency:resolve
 
+COPY . /workspace
 RUN cd /workspace \
     && KAFKA_VERSION=$KAFKA_VERSION make package MAXWELL_VERSION=$MAXWELL_VERSION \
     && mkdir /app \
