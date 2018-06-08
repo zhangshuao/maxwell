@@ -1,12 +1,13 @@
 FROM maven:3.5-jdk-8
 ENV MAXWELL_VERSION=1.14.7 KAFKA_VERSION=1.0.0
 
-COPY . /workspace
-
 RUN apt-get update \
     && apt-get -y upgrade \
-    && apt-get install -y make \
-    && cd /workspace \
+    && apt-get install -y make
+
+COPY . /workspace
+
+RUN cd /workspace \
     && KAFKA_VERSION=$KAFKA_VERSION make package MAXWELL_VERSION=$MAXWELL_VERSION \
     && mkdir /app \
     && mv /workspace/target/maxwell-$MAXWELL_VERSION/maxwell-$MAXWELL_VERSION/* /app/ \
@@ -16,4 +17,4 @@ RUN apt-get update \
 
 WORKDIR /app
 
-CMD [ "/bin/bash", "-c", "bin/maxwell --user=$MYSQL_USERNAME --password=$MYSQL_PASSWORD --host=$MYSQL_HOST --producer=kafka --kafka.bootstrap.servers=$KAFKA_BROKERS $MAXWELL_OPTIONS" ]
+CMD [ "/bin/bash", "-c", "bin/maxwell-docker" ]
