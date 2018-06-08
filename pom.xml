@@ -4,7 +4,7 @@
 
   <groupId>com.zendesk</groupId>
   <artifactId>maxwell</artifactId>
-  <version>1.14.3</version>
+  <version>1.14.7</version>
   <packaging>jar</packaging>
 
   <name>maxwell</name>
@@ -180,11 +180,6 @@
       <version>1.7.21</version>
     </dependency>
     <dependency>
-      <groupId>com.zendesk</groupId>
-      <artifactId>open-replicator</artifactId>
-      <version>1.6.0</version>
-    </dependency>
-    <dependency>
       <groupId>com.github.shyiko</groupId>
       <artifactId>mysql-binlog-connector-java</artifactId>
       <version>0.16.1</version>
@@ -273,6 +268,11 @@
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-sqs</artifactId>
       <version>1.11.68</version>
+    </dependency>
+    <dependency>
+      <groupId>me.tongfei</groupId>
+      <artifactId>progressbar</artifactId>
+      <version>0.6.0</version>
     </dependency>
   </dependencies>
 
