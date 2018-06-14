@@ -2,13 +2,15 @@ package com.zendesk.maxwell.replication;
 
 import com.codahale.metrics.Histogram;
 import com.github.shyiko.mysql.binlog.BinaryLogClient;
-import com.github.shyiko.mysql.binlog.event.*;
+import com.github.shyiko.mysql.binlog.event.EventType;
+import com.github.shyiko.mysql.binlog.event.QueryEventData;
+import com.github.shyiko.mysql.binlog.event.RowsQueryEventData;
+import com.github.shyiko.mysql.binlog.event.TableMapEventData;
 import com.github.shyiko.mysql.binlog.event.deserialization.EventDeserializer;
-import com.github.shyiko.mysql.binlog.network.SSLMode;
 import com.zendesk.maxwell.MaxwellContext;
 import com.zendesk.maxwell.MaxwellMysqlConfig;
 import com.zendesk.maxwell.bootstrap.AbstractBootstrapper;
-import com.zendesk.maxwell.filtering.Filter;
+import com.zendesk.maxwell.filtering.FilterResult;
 import com.zendesk.maxwell.monitoring.Metrics;
 import com.zendesk.maxwell.producer.AbstractProducer;
 import com.zendesk.maxwell.row.RowMap;
@@ -184,12 +186,14 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 				case EXT_UPDATE_ROWS:
 				case EXT_DELETE_ROWS:
 					Table table = tableCache.getTable(event.getTableID());
-
-					if ( table != null && shouldOutputEvent(table.getDatabase(), table.getName(), filter, table.getColumnNames()) ) {
-						for ( RowMap r : event.jsonMaps(table, lastHeartbeatPosition, currentQuery) )
-							if (shouldOutputRowMap(table.getDatabase(), table.getName(), r, filter)) {
-								buffer.add(r);
-							}
+					if (table != null) {
+						FilterResult filterResult = shouldOutputEvent(table.getDatabase(), table.getName(), filter, table.getColumnNames());
+						if (filterResult != null && filterResult.include) {
+							for ( RowMap r : event.jsonMaps(table, lastHeartbeatPosition, currentQuery) )
+								if (shouldOutputRowMap(filterResult, r, filter)) {
+									buffer.add(r);
+								}
+						}
 					}
 					currentQuery = null;
 					break;

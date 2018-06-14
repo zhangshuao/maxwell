@@ -1,8 +1,5 @@
 package com.zendesk.maxwell.filtering;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 public class FilterPattern {
@@ -19,13 +16,13 @@ public class FilterPattern {
 		return (database == null || dbPattern.matcher(database).find())
 			&& (table == null || tablePattern.matcher(table).find());
 	}
-	public void match(String database, String table, FilterResult match) {
-		if ( appliesTo(database, table) )
-			match.include = (this.type == FilterPatternType.INCLUDE);
-	}
 
-	public void matchValue(String database, String table, Map<String, Object> data, FilterResult match) {
-		match(database, table, match);
+	public void match(String database, String table, FilterResult match) {
+		if ( appliesTo(database, table) ) {
+			match.include = (this.type == FilterPatternType.INCLUDE);
+			if (match.include)
+				match.tablePattens.add(this);
+		}
 	}
 
 	public FilterPatternType getType() {
@@ -68,9 +65,5 @@ public class FilterPattern {
 		}
 
 		return s + patternToString(dbPattern) + "." + patternToString(tablePattern);
-	}
-
-	public boolean couldIncludeColumn(String database, String table, Set<String> columns) {
-		return false;
 	}
 }

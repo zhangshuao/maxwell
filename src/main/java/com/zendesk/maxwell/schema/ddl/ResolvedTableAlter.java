@@ -52,7 +52,7 @@ public class ResolvedTableAlter extends ResolvedSchemaChange {
 
 	@Override
 	public boolean shouldOutput(Filter filter) {
-		return Filter.includes(filter, database, oldTable.getName()) &&
-			Filter.includes(filter, database, newTable.getName());
+		return Filter.includes(filter, database, oldTable.getName()).include &&
+			Filter.includes(filter, database, newTable.getName()).include;
 	}
 }

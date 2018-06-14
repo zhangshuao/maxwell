@@ -10,15 +10,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
-import static java.io.StreamTokenizer.*;
+import static java.io.StreamTokenizer.TT_EOF;
+import static java.io.StreamTokenizer.TT_WORD;
 
 public class FilterParser {
 	private StreamTokenizer tokenizer;
 	private InputStreamReader inputStream;
 	private final String input;
+	private List<FilterPattern> tablePatterns;
+	private List<FilterColumnPattern> columnPatterns;
+	private boolean hasNext = true;
 
 	public FilterParser(String input) {
 		this.input = input;
+		tablePatterns = new ArrayList<>();
+		columnPatterns = new ArrayList<>();
 	}
 
 	public List<FilterPattern> parse() throws InvalidFilterException {
@@ -30,14 +36,14 @@ public class FilterParser {
 
 		this.tokenizer = new StreamTokenizer(inputStream);
 		try {
-			return doParse();
+			doParse();
+			return consolidate();
 		} catch ( IOException e ) {
 			throw new InvalidFilterException(e.getMessage());
 		}
 	}
 
-	private List<FilterPattern> doParse() throws IOException {
-		ArrayList<FilterPattern> patterns = new ArrayList<>();
+	private void doParse() throws IOException {
 		tokenizer.ordinaryChar('.');
 		tokenizer.ordinaryChar('/');
 		tokenizer.wordChars('_', '_');
@@ -51,11 +57,8 @@ public class FilterParser {
 
 		tokenizer.nextToken();
 
-		FilterPattern p;
-		while ( (p = parseFilterPattern()) != null )
-			patterns.add(p);
-
-		return patterns;
+		while ( hasNext )
+			parseFilterPattern();
 	}
 
 	private void skipToken(char token) throws IOException {
@@ -65,13 +68,13 @@ public class FilterParser {
 		tokenizer.nextToken();
 	}
 
-
-	private FilterPattern parseFilterPattern() throws IOException {
+	private void parseFilterPattern() throws IOException {
 		FilterPatternType type;
-		FilterPattern ret;
 
-		if ( tokenizer.ttype == TT_EOF )
-			return null;
+		if ( tokenizer.ttype == TT_EOF ) {
+			hasNext = false;
+			return;
+		}
 
 		if ( tokenizer.ttype != TT_WORD )
 			throw new IOException("expected [include, exclude, blacklist] in filter definition.");
@@ -91,7 +94,6 @@ public class FilterParser {
 		}
 		tokenizer.nextToken();
 
-
 		skipToken(':');
 		Pattern dbPattern = parsePattern();
 		skipToken('.');
@@ -109,16 +111,14 @@ public class FilterParser {
 
 			skipToken('=');
 			Pattern valuePattern = parsePattern();
-			ret = new FilterColumnPattern(type, dbPattern, tablePattern, columnName, valuePattern);
+			columnPatterns.add(new FilterColumnPattern(type, dbPattern, tablePattern, columnName, valuePattern));
 		} else {
-			ret = new FilterPattern(type, dbPattern, tablePattern);
+			tablePatterns.add(new FilterPattern(type, dbPattern, tablePattern));
 		}
 
 		if ( tokenizer.ttype == ',' ) {
 			tokenizer.nextToken();
 		}
-
-		return ret;
 	}
 
 	private Pattern parsePattern() throws IOException {
@@ -155,5 +155,19 @@ public class FilterParser {
 			lastChar = ch;
 		}
 		return s;
+	}
+
+	private List<FilterPattern> consolidate() {
+		// seems quite hard or even impossible to consolidate here
+		// if it's possible, then make `FilterPattern` have an Optional<FilterColumnPattern>
+		return new ArrayList<>();
+	}
+
+	public List<FilterPattern> getTablePatterns() {
+		return tablePatterns;
+	}
+
+	public List<FilterColumnPattern> getColumnPatterns() {
+		return columnPatterns;
 	}
 }

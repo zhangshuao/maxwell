@@ -2,8 +2,9 @@ package com.zendesk.maxwell.replication;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
-import com.zendesk.maxwell.filtering.Filter;
 import com.zendesk.maxwell.bootstrap.AbstractBootstrapper;
+import com.zendesk.maxwell.filtering.Filter;
+import com.zendesk.maxwell.filtering.FilterResult;
 import com.zendesk.maxwell.monitoring.Metrics;
 import com.zendesk.maxwell.producer.AbstractProducer;
 import com.zendesk.maxwell.row.HeartbeatRowMap;
@@ -119,25 +120,23 @@ public abstract class AbstractReplicator extends RunLoopProcess implements Repli
 	 * @param filter A table-filter, or null
 	 * @return Whether we should write the event to the producer
 	 */
-	protected boolean shouldOutputEvent(String database, String table, Filter filter, Set<String> columnNames) {
+	protected FilterResult shouldOutputEvent(String database, String table, Filter filter, Set<String> columnNames) {
 		Boolean isSystemWhitelisted = this.maxwellSchemaDatabaseName.equals(database)
 			&& ("bootstrap".equals(table) || "heartbeats".equals(table));
 
 		if ( Filter.isSystemBlacklisted(database, table) )
-			return false;
+			return null;
 		else if ( isSystemWhitelisted )
-			return true;
+			return new FilterResult();
 		else {
-			if ( Filter.includes(filter, database, table) )
-				return true;
-			else
-				return Filter.couldIncludeFromColumnFilters(filter, database, table, columnNames);
+			FilterResult filterResult = Filter.includes(filter, database, table);
+			filter.associateColumnPatterns(database, table, filterResult);
+			return filterResult;
 		}
 	}
 
-
-	protected boolean shouldOutputRowMap(String database, String table, RowMap rowMap, Filter filter) {
-		return Filter.includes(filter, database, table, rowMap.getData());
+	protected boolean shouldOutputRowMap(FilterResult result, RowMap rowMap, Filter filter) {
+		return Filter.includes(filter, result, rowMap.getData());
 	}
 
 	/**

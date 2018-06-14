@@ -5,11 +5,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 
-public class FilterColumnPattern extends FilterPattern {
+public class FilterColumnPattern {
 	private static final Logger LOGGER = LoggerFactory.getLogger(FilterColumnPattern.class);
+	protected final FilterPatternType type;
+	private final Pattern dbPattern, tablePattern;
 	private final String columnName;
 	private final Pattern columnPattern;
 	private final boolean columnPatternIsNull;
@@ -21,19 +22,17 @@ public class FilterColumnPattern extends FilterPattern {
 		String columnName,
 		Pattern columnPattern
 	) {
-		super(type, dbPattern, tablePattern);
+		this.type = type;
+		this.dbPattern = dbPattern;
+		this.tablePattern = tablePattern;
 		this.columnName = columnName;
 		this.columnPattern = columnPattern;
 		this.columnPatternIsNull = "^null$".equals(columnPattern.toString().toLowerCase());
 	}
 
-	@Override
-	public void match(String database, String table, FilterResult match) { }
-
-	@Override
-	public void matchValue(String database, String table, Map<String, Object> data, FilterResult match) {
+	public void matchValue(Map<String, Object> data, FilterResult match) {
 		boolean applyFilter = false;
-		if ( appliesTo(database, table) && data.containsKey(columnName) ) {
+		if ( data.containsKey(columnName) ) {
 			Object value = data.get(columnName);
 
 			if ( columnPatternIsNull ) {
@@ -56,11 +55,27 @@ public class FilterColumnPattern extends FilterPattern {
 			match.include = (this.type == FilterPatternType.INCLUDE);
 	}
 
-	@Override
-	public boolean couldIncludeColumn(String database, String table, Set<String> columns) {
-		return type == FilterPatternType.INCLUDE
-			&& appliesTo(database, table)
-			&& columns.contains(columnName);
+	public boolean couldIncludeColumn(String database, String table) {
+		return type == FilterPatternType.INCLUDE && appliesTo(database, table);
+	}
+
+	// TODO
+	private boolean appliesTo(String database, String table) {
+		return (database == null || dbPattern.matcher(database).find())
+				&& (table == null || tablePattern.matcher(table).find());
+	}
+
+	// TODO
+	private String patternToString(Pattern p) {
+		String s = p.pattern();
+
+		if ( s.equals("") ) {
+			return "*";
+		} else if ( s.startsWith("^") && s.endsWith("$") ) {
+			return s.substring(1, s.length() - 1);
+		} else {
+			return "/" + s + "/";
+		}
 	}
 
 	@Override
