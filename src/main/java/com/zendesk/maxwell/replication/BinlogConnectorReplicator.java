@@ -9,7 +9,6 @@ import com.github.shyiko.mysql.binlog.event.QueryEventData;
 import com.github.shyiko.mysql.binlog.event.RowsQueryEventData;
 import com.github.shyiko.mysql.binlog.event.TableMapEventData;
 import com.github.shyiko.mysql.binlog.event.deserialization.EventDeserializer;
-import com.zendesk.maxwell.MaxwellContext;
 import com.zendesk.maxwell.MaxwellMysqlConfig;
 import com.zendesk.maxwell.bootstrap.AbstractBootstrapper;
 import com.zendesk.maxwell.filtering.Filter;
@@ -28,9 +27,7 @@ import com.zendesk.maxwell.util.RunLoopProcess;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.SQLException;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
@@ -40,7 +37,6 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 	static final Logger LOGGER = LoggerFactory.getLogger(BinlogConnectorReplicator.class);
 	private static final long MAX_TX_ELEMENTS = 10000;
 
-	private final String clientID;
 	private final String maxwellSchemaDatabaseName;
 
 	private final BinaryLogClient client;
@@ -48,13 +44,11 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 	private BinlogConnectorLifecycleListener binlogLifecycleListener;
 	private final LinkedBlockingDeque<BinlogConnectorEvent> queue = new LinkedBlockingDeque<>(20);
 	private final TableCache tableCache = new TableCache();
+	private final ReplicatorHeartbeatSupport heartbeatSupport;
 
 	private final boolean stopOnEOF;
 	private boolean hitEOF = false;
 
-	private Position lastHeartbeatPosition;
-	private final HeartbeatNotifier heartbeatNotifier;
-	private Long stopAtHeartbeat;
 	private Filter filter;
 
 	private final AbstractBootstrapper bootstrapper;
@@ -85,15 +79,13 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 		String clientID,
 		HeartbeatNotifier heartbeatNotifier
 	) {
-		this.clientID = clientID;
 		this.bootstrapper = bootstrapper;
 		this.maxwellSchemaDatabaseName = maxwellSchemaDatabaseName;
 		this.producer = producer;
-		this.lastHeartbeatPosition = start;
-		this.heartbeatNotifier = heartbeatNotifier;
 		this.stopOnEOF = stopOnEOF;
 		this.schemaStore = schemaStore;
 
+		this.heartbeatSupport = new ReplicatorHeartbeatSupport(clientID, heartbeatNotifier, start);
 		/* setup metrics */
 		rowCounter = metrics.getRegistry().counter(
 			metrics.metricName("row", "count")
@@ -177,23 +169,19 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 	 */
 
 	public Long getLastHeartbeatRead() {
-		return lastHeartbeatPosition.getLastHeartbeatRead();
+		return heartbeatSupport.getLastHeartbeatRead();
 	}
 
 	public void stopAtHeartbeat(long heartbeat) {
-		stopAtHeartbeat = heartbeat;
+		heartbeatSupport.setStopAtHeartbeat(heartbeat);
 	}
 
 	protected void processRow(RowMap row) throws Exception {
 		if ( row instanceof HeartbeatRowMap) {
 			producer.push(row);
-			if (stopAtHeartbeat != null) {
-				long thisHeartbeat = row.getPosition().getLastHeartbeatRead();
-				if (thisHeartbeat >= stopAtHeartbeat) {
-					LOGGER.info("received final heartbeat " + thisHeartbeat + "; stopping replicator");
-					// terminate runLoop
-					this.taskState.stopped();
-				}
+			if ( heartbeatSupport.shouldStop(row.getPosition())) {
+				LOGGER.info("received final heartbeat " + row.getPosition().getLastHeartbeatRead() + "; stopping replicator");
+				this.taskState.stopped();
 			}
 		} else if (!bootstrapper.shouldSkip(row) && !isMaxwellRow(row))
 			producer.push(row);
@@ -201,27 +189,6 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 			bootstrapper.work(row, producer, this);
 	}
 
-
-	/**
-	 * If the input RowMap is one of the heartbeat pulses we sent out,
-	 * process it.  If it's one of our heartbeats, we build a `HeartbeatRowMap`,
-	 * which will be handled specially in producers (namely, it causes the binlog position to advance).
-	 * It is isn't, we leave the row as a RowMap and the rest of the chain will ignore it.
-	 *
-	 * @return either a RowMap or a HeartbeatRowMap
-	 */
-
-	private RowMap processHeartbeats(RowMap row) {
-		String hbClientID = (String) row.getData("client_id");
-		if ( !Objects.equals(hbClientID, this.clientID) )
-			return row; // plain row -- do not process.
-
-		long lastHeartbeatRead = (Long) row.getData("heartbeat");
-		LOGGER.debug("replicator picked up heartbeat: " + lastHeartbeatRead);
-		this.lastHeartbeatPosition = row.getPosition().withHeartbeat(lastHeartbeatRead);
-		heartbeatNotifier.heartbeat(lastHeartbeatRead);
-		return HeartbeatRowMap.valueOf(row.getDatabase(), this.lastHeartbeatPosition, row.getNextPosition().withHeartbeat(lastHeartbeatRead));
-	}
 
 	/**
 	 * Parse a DDL statement and output the results to the producer
@@ -434,7 +401,7 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 				RowMap row = rowBuffer.removeFirst();
 
 				if ( row != null && isMaxwellRow(row) && row.getTable().equals("heartbeats") )
-					return processHeartbeats(row);
+					return heartbeatSupport.processHeartbeats(row);
 				else
 					return row;
 			}
