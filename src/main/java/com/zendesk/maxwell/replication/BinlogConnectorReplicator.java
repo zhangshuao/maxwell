@@ -36,6 +36,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class BinlogConnectorReplicator extends RunLoopProcess implements Replicator {
+
+	private class GTIDConnectionRestartException extends Exception {}
+
 	static final Logger LOGGER = LoggerFactory.getLogger(BinlogConnectorReplicator.class);
 	private static final long MAX_TX_ELEMENTS = 10000;
 
@@ -67,6 +70,7 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 	private Histogram transactionRowCount;
 	private Histogram transactionExecutionTime;
 
+	private String current_gtid_event;
 
 	private static Pattern createTablePattern =
 		Pattern.compile("^CREATE\\s+TABLE", Pattern.CASE_INSENSITIVE);
@@ -325,7 +329,13 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 			String binlogPos = client.getBinlogFilename() + ":" + client.getBinlogPosition();
 			String position = gtidStr == null ? binlogPos : gtidStr;
 			LOGGER.warn("replicator stopped at position: " + position + " -- restarting");
-			client.connect(5000);
+
+			if ( this.current_gtid_event != null ) {
+				removeGTIDFromSet(this.current_gtid_event);
+				client.connect(5000);
+				throw new GTIDConnectionRestartException();
+			} else
+				client.connect(5000);
 		}
 	}
 
@@ -384,6 +394,8 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 								buffer.add(r);
 							}
 					}
+
+					LOGGER.debug("added row...");
 					currentQuery = null;
 					break;
 				case TABLE_MAP:
@@ -462,7 +474,9 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 					else
 						return null;
 				} else {
-					ensureReplicatorThread();
+					try {
+						ensureReplicatorThread();
+					} catch ( GTIDConnectionRestartException e ) {}
 					return null;
 				}
 			}
@@ -488,10 +502,17 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 					QueryEventData qe = event.queryData();
 					String sql = qe.getSql();
 					if (BinlogConnectorEvent.BEGIN.equals(sql)) {
-						rowBuffer = getTransactionRows(event);
-						rowBuffer.setServerId(event.getEvent().getHeader().getServerId());
-						rowBuffer.setThreadId(qe.getThreadId());
-						rowBuffer.setSchemaId(getSchemaId());
+						try {
+							rowBuffer = getTransactionRows(event);
+							rowBuffer.setServerId(event.getEvent().getHeader().getServerId());
+							rowBuffer.setThreadId(qe.getThreadId());
+							rowBuffer.setSchemaId(getSchemaId());
+
+							current_gtid_event = null;
+						} catch ( GTIDConnectionRestartException e ) {
+							LOGGER.warn("lost connection while processing " + current_gtid_event + ", restarting connector to reprocess " + current_gtid_event);
+							removeGTIDFromSet(current_gtid_event);
+						}
 					} else {
 						processQueryEvent(event);
 					}
@@ -505,11 +526,25 @@ public class BinlogConnectorReplicator extends RunLoopProcess implements Replica
 						return null;
 					}
 					break;
+				case GTID:
+					current_gtid_event = event.getPosition().getGtid();
 				default:
 					break;
 			}
-
 		}
+	}
+
+	// due to the nature of where GTID events occur in the stream, the binlog connector's gtid set will
+	// contain GTIDs marked as completed that haven't been prcoessed yet.  If we lose our connection in
+	// the middle of processing one, we need to rewind back to the start of it.
+	private void removeGTIDFromSet(String gtid) {
+		String currentGTIDSet = this.client.getGtidSet();
+		String[] gtidSplit = gtid.split(":");
+		String uuid = gtidSplit[0];
+		Long position = Long.parseLong(gtidSplit[1]);
+
+		currentGTIDSet.replaceFirst(uuid + ":\\d+", uuid + ":" + (position - 1));
+		client.setGtidSet(currentGTIDSet);
 	}
 
 	public void setFilter(Filter filter) {

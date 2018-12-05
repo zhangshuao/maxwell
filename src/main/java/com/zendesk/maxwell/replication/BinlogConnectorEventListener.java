@@ -6,6 +6,7 @@ import com.github.shyiko.mysql.binlog.BinaryLogClient;
 import com.github.shyiko.mysql.binlog.event.Event;
 import com.github.shyiko.mysql.binlog.event.EventType;
 import com.github.shyiko.mysql.binlog.event.GtidEventData;
+import com.github.shyiko.mysql.binlog.event.WriteRowsEventData;
 import com.zendesk.maxwell.monitoring.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,6 +67,14 @@ class BinlogConnectorEventListener implements BinaryLogClient.EventListener {
 				return;
 			}
 		}
+
+		/*
+		try {
+			if ( event.getHeader().getEventType() == EventType.EXT_WRITE_ROWS )
+				Thread.sleep(10);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}*/
 
 		if (trackMetrics) {
 			queueTimer.update(System.currentTimeMillis() - eventSeenAt, TimeUnit.MILLISECONDS);

@@ -102,6 +102,10 @@ public class MaxwellContext {
 	}
 
 	public Connection getReplicationConnection() throws SQLException {
+		try {
+			LOGGER.debug("Opening replication connection: " + config.replicationMysql.getConnectionURI(false));
+		} catch ( URISyntaxException e ) {}
+
 		return this.replicationConnectionPool.getConnection();
 	}
 
