@@ -566,6 +566,12 @@ public class MaxwellIntegrationTest extends MaxwellTestWithIsolatedServer {
 	}
 
 	@Test
+	public void testDecimal() throws Exception {
+		runJSON("/json/test_decimal");
+	}
+
+
+	@Test
 	public void testTime() throws Exception {
 		requireMinimumVersion(server.VERSION_5_6);
 		runJSON("/json/test_time");
