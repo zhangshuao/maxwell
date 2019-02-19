@@ -120,11 +120,7 @@ class KafkaCallback implements Callback {
 		// with no fallback topic to avoid infinite loops
 		ProducerContext fallbackContext = context.withoutFallbackTopic();
 		KafkaCallback cb = this.withContext(fallbackContext);
-		try {
-			context.producer.sendFallbackAsync(context.fallbackTopic, key, cb, e);
-		} catch (Exception fallbackEx) {
-			cb.onCompletion(md, fallbackEx);
-		}
+		context.producer.sendFallbackAsync(context.fallbackTopic, key, cb, md, e);
 	}
 
 }
@@ -262,9 +258,13 @@ class MaxwellKafkaProducerWorker extends AbstractAsyncProducer implements Runnab
 		sendAsync(record, callback);
 	}
 
-	public void sendFallbackAsync(String topic, RowIdentity fallbackRecord, KafkaCallback callback, Exception reason) throws Exception {
-		ProducerRecord<String, String> record = makeFallbackRecord(topic, fallbackRecord, reason);
-		sendAsync(record, callback);
+	public void sendFallbackAsync(String topic, RowIdentity fallbackRecord, KafkaCallback callback, RecordMetadata md, Exception reason) {
+		try {
+			ProducerRecord<String, String> record = makeFallbackRecord(topic, fallbackRecord, reason);
+			sendAsync(record, callback);
+		} catch (Exception fallbackEx) {
+			callback.onCompletion(md, fallbackEx);
+		}
 	}
 
 	void sendAsync(ProducerRecord<String, String> record, Callback callback) {
